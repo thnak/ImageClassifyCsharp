@@ -89,5 +89,15 @@ namespace ImageClassify.Properties {
                 return ((byte[])(obj));
             }
         }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        public static byte[] resnet18_quantization {
+            get {
+                object obj = ResourceManager.GetObject("resnet18_quantization", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
     }
 }

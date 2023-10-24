@@ -127,4 +127,7 @@
   <data name="resnet18" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\resnet18.onnx;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </data>
+  <data name="resnet18_quantization" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\resnet18_quantization.onnx;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
 </root>

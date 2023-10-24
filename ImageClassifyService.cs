@@ -12,7 +12,8 @@ namespace ImageClassify
     {
         MobileNet_V3_Small_Weights,
         MobileNet_V3_Large_Weights,
-        Resnet18
+        Resnet18,
+        Restnet18_Quantize
     }
 
     public enum DeviceTypes
@@ -73,7 +74,7 @@ namespace ImageClassify
                 _jsRuntime = jsRuntime;
             }
 
-            JsLogger("[ImageClassifyService][_MemoryCache] reuse form memory");
+            JsLogger("[ImageClassifyService][_MemoryCache] reuse from memory");
         }
 
         public ImageClassifyService(ModelWeight weight, DeviceTypes device, IJSRuntime? jsRuntime = null)
@@ -102,7 +103,7 @@ namespace ImageClassify
                     }
                     catch (Exception e)
                     {
-                        JsLogger($"[ImageClassifyService][Init] {e.Message}");
+                        JsLogger($"[ImageClassifyService][Init][ERROR] {e.Message}");
                     }
 
                     break;
@@ -117,7 +118,7 @@ namespace ImageClassify
                     }
                     catch (Exception e)
                     {
-                        JsLogger($"[ImageClassifyService][Init] {e.Message}");
+                        JsLogger($"[ImageClassifyService][Init][ERROR] {e.Message}");
                     }
 
                     break;
@@ -128,10 +129,11 @@ namespace ImageClassify
                     {
                         _sessionOptions.AppendExecutionProvider_CoreML(CoreMLFlags
                             .COREML_FLAG_ONLY_ENABLE_DEVICE_WITH_ANE);
+                        JsLogger($"[ImageClassifyService][Init][AppendExecutionProvider_CoreML]");
                     }
                     catch (Exception e)
                     {
-                        JsLogger($"[ImageClassifyService][Init][AppendExecutionProvider_CoreML]");
+                        JsLogger($"[ImageClassifyService][Init][ERROR] {e.Message}");
                     }
 
                     break;
@@ -147,7 +149,7 @@ namespace ImageClassify
                     }
                     catch (Exception e)
                     {
-                        JsLogger($"[ImageClassifyService][Init] {e.Message}");
+                        JsLogger($"[ImageClassifyService][Init][ERROR] {e.Message}");
                     }
 
                     break;
@@ -168,25 +170,36 @@ namespace ImageClassify
             {
                 case ModelWeight.MobileNet_V3_Large_Weights:
                 {
-                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_large, _sessionOptions, prepackedWeightsContainer);
+                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_large, _sessionOptions,
+                        prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] mobilenet_v3_large");
                     break;
                 }
                 case ModelWeight.MobileNet_V3_Small_Weights:
                 {
-                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_small, _sessionOptions, prepackedWeightsContainer);
+                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_small, _sessionOptions,
+                        prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] mobilenet_v3_small");
                     break;
                 }
                 case ModelWeight.Resnet18:
                 {
-                    _session = new InferenceSession(Properties.Resources.resnet18, _sessionOptions, prepackedWeightsContainer);
+                    _session = new InferenceSession(Properties.Resources.resnet18, _sessionOptions,
+                        prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] resnet18");
+                    break;
+                }
+                case ModelWeight.Restnet18_Quantize:
+                {
+                    _session = new InferenceSession(Properties.Resources.resnet18_quantization, _sessionOptions,
+                        prepackedWeightsContainer);
+                    JsLogger($"[ImageClassifyService][Init] resnet18_quantization");
                     break;
                 }
                 default:
                 {
-                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_small, _sessionOptions, prepackedWeightsContainer);
+                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_small, _sessionOptions,
+                        prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] mobilenet_v3_small");
                     break;
                 }
@@ -282,14 +295,17 @@ namespace ImageClassify
             });
 
             var sLongs = _inputShape.Select(item => (long)item).ToArray();
-            using var inputOrtValue = OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance, processedImage.Buffer, sLongs);
+            using var inputOrtValue =
+                OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance, processedImage.Buffer, sLongs);
             var inputs = new Dictionary<string, OrtValue> { { _inputNames.First(), inputOrtValue } };
 
-            using IDisposableReadOnlyCollection<OrtValue> predictions = await Task.FromResult(_session.Run(_runOptions, inputs, _session.OutputNames));
+            using IDisposableReadOnlyCollection<OrtValue> predictions =
+                await Task.FromResult(_session.Run(_runOptions, inputs, _session.OutputNames));
 
             var resultDic = new Dictionary<string, float>();
             var scores = predictions[0].Value.GetTensorDataAsSpan<float>().ToArray();
             var indies = predictions[1].Value.GetTensorDataAsSpan<long>().ToArray();
+
             for (var i = 0; i < indies.Length; i++)
             {
                 resultDic.Add(_categories[(int)indies[i]], scores[i]);
