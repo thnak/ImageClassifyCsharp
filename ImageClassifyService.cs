@@ -22,7 +22,8 @@ namespace ImageClassify
         MacOs,
         MacCatalist,
         WinUi,
-        Tizen
+        Tizen,
+        Default
     }
 
     public interface IImageClassifyService
@@ -71,6 +72,7 @@ namespace ImageClassify
             {
                 _jsRuntime = jsRuntime;
             }
+
             JsLogger("[ImageClassifyService][_MemoryCache] reuse form memory");
         }
 
@@ -83,10 +85,10 @@ namespace ImageClassify
 
             _sessionOptions = new SessionOptions();
             _sessionOptions.EnableMemoryPattern = true;
+            _sessionOptions.EnableCpuMemArena = true;
             _sessionOptions.EnableProfiling = false;
             _sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
             _sessionOptions.ExecutionMode = ExecutionMode.ORT_PARALLEL;
-            ProviderOptionsValueHelper helper = new ProviderOptionsValueHelper();
 
             switch (device)
             {
@@ -152,6 +154,9 @@ namespace ImageClassify
                 }
                 default:
                 {
+                    _sessionOptions.EnableMemoryPattern = true;
+                    _sessionOptions.ExecutionMode = ExecutionMode.ORT_PARALLEL;
+                    JsLogger($"[ImageClassifyService][Init][DEFAULT]");
                     break;
                 }
             }
@@ -163,43 +168,54 @@ namespace ImageClassify
             {
                 case ModelWeight.MobileNet_V3_Large_Weights:
                 {
-                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_large, _sessionOptions,
-                        prepackedWeightsContainer);
+                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_large, _sessionOptions, prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] mobilenet_v3_large");
                     break;
                 }
                 case ModelWeight.MobileNet_V3_Small_Weights:
                 {
-                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_small, _sessionOptions,
-                        prepackedWeightsContainer);
+                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_small, _sessionOptions, prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] mobilenet_v3_small");
-
                     break;
                 }
                 case ModelWeight.Resnet18:
                 {
-                    _session = new InferenceSession(Properties.Resources.resnet18, _sessionOptions,
-                        prepackedWeightsContainer);
+                    _session = new InferenceSession(Properties.Resources.resnet18, _sessionOptions, prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] resnet18");
-
                     break;
                 }
                 default:
                 {
-                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_small, _sessionOptions,
-                        prepackedWeightsContainer);
+                    _session = new InferenceSession(Properties.Resources.mobilenet_v3_small, _sessionOptions, prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] mobilenet_v3_small");
-
                     break;
                 }
             }
 
             var metadata = _session.ModelMetadata;
             var customMetadata = metadata.CustomMetadataMap;
-            string categories;
-            if (customMetadata.TryGetValue("categories", out categories))
+            if (customMetadata.TryGetValue("categories", out var categories))
             {
-                _categories = new List<string>(JsonSerializer.Deserialize<List<string>>(categories));
+                var content = JsonSerializer.Deserialize<List<string>>(categories);
+                if (content != null) _categories = new List<string>(content);
+                else
+                {
+                    JsLogger("[ImageClassifyService][Init][ERROR] not found categories in model metadata");
+                    _categories = new List<string>();
+                    for (var i = 0; i < 10000; i++)
+                    {
+                        _categories.Add($"Named[{i}]");
+                    }
+                }
+            }
+            else
+            {
+                JsLogger("[ImageClassifyService][Init][ERROR] not found categories in model metadata");
+                _categories = new List<string>();
+                for (var i = 0; i < 10000; i++)
+                {
+                    _categories.Add($"Named[{i}]");
+                }
             }
 
             _inputNames = _session.InputNames;
@@ -233,13 +249,13 @@ namespace ImageClassify
 
         public async Task<Dictionary<string, float>> InferenceAsync(byte[] byteImage)
         {
-            Image<Rgb24> image = Image.Load<Rgb24>(byteImage);
+            using Image<Rgb24> image = Image.Load<Rgb24>(byteImage);
             return await InferenceAsync(image);
         }
 
         public async Task<Dictionary<string, float>> InferenceAsync(Image<Rgb24> image)
         {
-            Stopwatch stopwatch = new Stopwatch();
+            var stopwatch = new Stopwatch();
             stopwatch.Start();
             image.Mutate(x =>
             {
@@ -249,38 +265,38 @@ namespace ImageClassify
                     Mode = ResizeMode.Crop
                 });
             });
-            
-            DenseTensor<float> processedImage = new(new[] { 1, 3, 224, 224 });
+
+            var processedImage = new DenseTensor<float>(dimensions: _inputShape);
             image.ProcessPixelRows(accessor =>
             {
-                for (int y = 0; y < accessor.Height; y++)
+                for (var y = 0; y < accessor.Height; y++)
                 {
-                    Span<Rgb24> pixelSpan = accessor.GetRowSpan(y);
-                    for (int x = 0; x < accessor.Width; x++)
+                    var pixelSpan = accessor.GetRowSpan(y);
+                    for (var x = 0; x < accessor.Width; x++)
                     {
-                        processedImage[0, 0, y, x] = (float)pixelSpan[x].R;
-                        processedImage[0, 1, y, x] = (float)pixelSpan[x].G;
-                        processedImage[0, 2, y, x] = (float)pixelSpan[x].B;
+                        processedImage[0, 0, y, x] = pixelSpan[x].R;
+                        processedImage[0, 1, y, x] = pixelSpan[x].G;
+                        processedImage[0, 2, y, x] = pixelSpan[x].B;
                     }
                 }
             });
 
-            long[] sLongs = _inputShape.Select(item => (long)item).ToArray();
+            var sLongs = _inputShape.Select(item => (long)item).ToArray();
             using var inputOrtValue = OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance, processedImage.Buffer, sLongs);
-            var inputs = new Dictionary<string, OrtValue>
-            {
-                { _inputNames.First(), inputOrtValue }
-            };
+            var inputs = new Dictionary<string, OrtValue> { { _inputNames.First(), inputOrtValue } };
+
             using IDisposableReadOnlyCollection<OrtValue> predictions = await Task.FromResult(_session.Run(_runOptions, inputs, _session.OutputNames));
-            Dictionary<string, float> resultDic = new Dictionary<string, float>();
-            var scores = predictions.First().Value.GetTensorDataAsSpan<float>().ToArray();
-            var indies = predictions.Last().Value.GetTensorDataAsSpan<long>().ToArray();
-            for (int i = 0; i < indies.Length; i++)
+
+            var resultDic = new Dictionary<string, float>();
+            var scores = predictions[0].Value.GetTensorDataAsSpan<float>().ToArray();
+            var indies = predictions[1].Value.GetTensorDataAsSpan<long>().ToArray();
+            for (var i = 0; i < indies.Length; i++)
             {
                 resultDic.Add(_categories[(int)indies[i]], scores[i]);
             }
 
             stopwatch.Stop();
+
             JsLogger($"[ImageClassifyService][InferenceAsync][SPEED] {stopwatch.ElapsedMilliseconds}ms");
             return resultDic;
         }
