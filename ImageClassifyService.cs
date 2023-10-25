@@ -8,7 +8,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace ImageClassify
 {
-    public enum ModelWeight
+    public enum ModelWeights
     {
         MobileNet_V3_Small_Weights,
         MobileNet_V3_Large_Weights,
@@ -19,9 +19,9 @@ namespace ImageClassify
     public enum DeviceTypes
     {
         Android,
-        IOS,
+        Ios,
         MacOs,
-        MacCatalist,
+        MacCatalyst,
         WinUi,
         Tizen,
         Default
@@ -77,13 +77,13 @@ namespace ImageClassify
             JsLogger("[ImageClassifyService][_MemoryCache] reuse from memory");
         }
 
-        public ImageClassifyService(ModelWeight weight, DeviceTypes device, IJSRuntime? jsRuntime = null)
+        public ImageClassifyService(ModelWeights weights, DeviceTypes device, IJSRuntime? jsRuntime = null)
         {
             if (jsRuntime != null)
             {
                 _jsRuntime = jsRuntime;
             }
-
+            var availableProviders = OrtEnv.Instance().GetAvailableProviders();
             _sessionOptions = new SessionOptions();
             _sessionOptions.EnableMemoryPattern = true;
             _sessionOptions.EnableCpuMemArena = true;
@@ -108,7 +108,7 @@ namespace ImageClassify
 
                     break;
                 }
-                case DeviceTypes.IOS:
+                case DeviceTypes.Ios:
                 {
                     try
                     {
@@ -166,30 +166,30 @@ namespace ImageClassify
             var prepackedWeightsContainer = new PrePackedWeightsContainer();
             _runOptions = new RunOptions();
 
-            switch (weight)
+            switch (weights)
             {
-                case ModelWeight.MobileNet_V3_Large_Weights:
+                case ModelWeights.MobileNet_V3_Large_Weights:
                 {
                     _session = new InferenceSession(Properties.Resources.mobilenet_v3_large, _sessionOptions,
                         prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] mobilenet_v3_large");
                     break;
                 }
-                case ModelWeight.MobileNet_V3_Small_Weights:
+                case ModelWeights.MobileNet_V3_Small_Weights:
                 {
                     _session = new InferenceSession(Properties.Resources.mobilenet_v3_small, _sessionOptions,
                         prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] mobilenet_v3_small");
                     break;
                 }
-                case ModelWeight.Resnet18:
+                case ModelWeights.Resnet18:
                 {
                     _session = new InferenceSession(Properties.Resources.resnet18, _sessionOptions,
                         prepackedWeightsContainer);
                     JsLogger($"[ImageClassifyService][Init] resnet18");
                     break;
                 }
-                case ModelWeight.Restnet18_Quantize:
+                case ModelWeights.Restnet18_Quantize:
                 {
                     _session = new InferenceSession(Properties.Resources.resnet18_quantization, _sessionOptions,
                         prepackedWeightsContainer);
@@ -274,7 +274,7 @@ namespace ImageClassify
             {
                 x.Resize(new ResizeOptions
                 {
-                    Size = new Size(_inputShape[2], _inputShape[3]),
+                    Size = new Size(_inputShape[3], _inputShape[2]),
                     Mode = ResizeMode.Crop
                 });
             });
