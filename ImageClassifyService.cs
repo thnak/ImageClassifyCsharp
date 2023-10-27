@@ -295,12 +295,10 @@ namespace ImageClassify
             });
 
             var sLongs = _inputShape.Select(item => (long)item).ToArray();
-            using var inputOrtValue =
-                OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance, processedImage.Buffer, sLongs);
+            using var inputOrtValue = OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance, processedImage.Buffer, sLongs);
             var inputs = new Dictionary<string, OrtValue> { { _inputNames.First(), inputOrtValue } };
 
-            using IDisposableReadOnlyCollection<OrtValue> predictions =
-                await Task.FromResult(_session.Run(_runOptions, inputs, _session.OutputNames));
+            using IDisposableReadOnlyCollection<OrtValue> predictions = await Task.FromResult(_session.Run(_runOptions, inputs, _session.OutputNames));
 
             var resultDic = new Dictionary<string, float>();
             var scores = predictions[0].Value.GetTensorDataAsSpan<float>().ToArray();
